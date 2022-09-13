@@ -3,30 +3,22 @@ name = "zero2prod"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+tokio = { version = "1.21.0", features = ["full"] }
+axum = "0.6.0-rc.1"
+hyper = { version = "0.14.20", features = ["full"] }
+tower = "0.4.13"
+serde = { version = "1.0.144", features = ["derive"] }
+sqlx = { version = "0.6.1", features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "chrono", "migrate"] }
+config = "0.13.2"
+uuid = { version = "1.1.2", features = ["v4"] }
+chrono = "0.4.22"
+tracing = "0.1.36"
+tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
+secrecy = { version = "0.8.0", features = ["serde"] }
+tracing-error = "0.2.0"
+color-eyre = "0.6.2"
 
-# On Windows 
-# ```
-# cargo install -f cargo-binutils
-# rustup component add llvm-tools-preview
-# ```
-[target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
-
-[target.x86_64-pc-windows-gnu]
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
-
-# On Linux:
-# - Ubuntu, `sudo apt-get install lld clang`
-# - Arch, `sudo pacman -S lld clang`
-[target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "linker=clang", "-C", "link-arg=-fuse-ld=lld"]
-
-# On MacOS, `brew install michaeleisel/zld/zld`
-[target.x86_64-apple-darwin]
-rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/zld"]
-
-[target.aarch64-apple-darwin]
-rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/zld"]
+[dev-dependencies]
+once_cell = "1.14.0"
+reqwest = "0.11.11"
