@@ -1,1 +1,6 @@
-pub async fn health_check() {}
+use tracing::{info, instrument};
+
+#[instrument]
+pub async fn health_check() {
+    info!("healthy");
+}

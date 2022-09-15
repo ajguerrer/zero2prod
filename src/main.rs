@@ -1,18 +1,17 @@
-use secrecy::ExposeSecret;
-use sqlx::PgPool;
+use std::time::Duration;
+
+use sqlx::postgres::PgPoolOptions;
 use zero2prod::{configuration::get_configuration, startup::run, telemetry::init_telemetry};
 
 #[tokio::main]
 async fn main() {
-    init_telemetry("info,sqlx=warn".into());
+    init_telemetry("info".into());
 
     let config = get_configuration().expect("Failed to read configuration.");
-    let db_pool = PgPool::connect(config.database.connection_string().expose_secret())
-        .await
-        .expect("Failed to connect to Postgres.");
+    let db_pool = PgPoolOptions::new()
+        .acquire_timeout(Duration::from_secs(2))
+        .connect_lazy_with(config.database.with_db());
 
-    let port = config.application_port;
-    run(&format!("127.0.0.1:{port}"), db_pool)
-        .await
-        .expect("Failed to run server.");
+    let address = format!("{}:{}", config.application.host, config.application.port);
+    run(&address, db_pool).await.expect("Failed to run server.");
 }
