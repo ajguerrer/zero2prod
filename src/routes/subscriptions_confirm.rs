@@ -1,38 +1,55 @@
-use axum::extract::{Query, State};
+use axum::{
+    extract::{Query, State},
+    response::{IntoResponse, Response},
+};
 use hyper::StatusCode;
 use serde::Deserialize;
 use sqlx::{query, PgPool};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::startup::AppState;
+use crate::{
+    log::{LogErr, WrapAndLogErr},
+    startup::AppState,
+};
 
 #[derive(Deserialize)]
 pub struct Params {
     subscription_token: String,
 }
 
-#[tracing::instrument(skip_all, fields(params.subscription_token))]
+#[derive(thiserror::Error, Debug)]
+pub enum ConfirmationError {
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+    #[error("there is no subscriber associated with the provided token")]
+    UnknownToken,
+}
+
+impl IntoResponse for ConfirmationError {
+    fn into_response(self) -> Response {
+        let status = match self {
+            ConfirmationError::UnknownToken => StatusCode::UNAUTHORIZED,
+            ConfirmationError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, self.to_string()).into_response()
+    }
+}
+
+#[tracing::instrument(skip_all, fields(token=params.subscription_token))]
 pub async fn confirm(
     state: State<AppState>,
     params: Query<Params>,
-) -> Result<(), (StatusCode, String)> {
+) -> Result<(), ConfirmationError> {
     let subscriber_id = get_subscriber_id_from_token(&state.db_pool, &params.subscription_token)
         .await
-        .map_err(|err| {
-            let msg = "failed to find subscriber by subscription token".to_string();
-            error!(%err, msg);
-            (StatusCode::INTERNAL_SERVER_ERROR, msg)
-        })?
-        .ok_or_else(|| (StatusCode::UNAUTHORIZED, String::new()))?;
+        .wrap_and_log_err("failed to retrieve subscriber id with the provided token")?
+        .ok_or(ConfirmationError::UnknownToken)
+        .log_err()?;
 
     confirm_subscriber(&state.db_pool, subscriber_id)
         .await
-        .map_err(|err| {
-            let msg = "failed to confirm subscriber".to_string();
-            error!(%err, msg);
-            (StatusCode::INTERNAL_SERVER_ERROR, msg)
-        })?;
+        .wrap_and_log_err("failed to update the subscriber status to `confirmed`")?;
 
     info!("subscription confirmed!");
     Ok(())

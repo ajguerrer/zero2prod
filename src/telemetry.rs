@@ -1,11 +1,14 @@
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 pub fn init_telemetry(level: String) {
-    color_eyre::install().expect("Failed to init telemetry.");
     tracing_subscriber::registry()
-        .with(EnvFilter::new(std::env::var("RUST_LOG").unwrap_or(level)))
+        .with(
+            EnvFilter::try_from_default_env()
+                .or_else(|_| EnvFilter::try_new(level))
+                .unwrap(),
+        )
+        .with(fmt::layer().with_target(false))
         .with(ErrorLayer::default())
-        .with(tracing_subscriber::fmt::layer())
         .init();
 }

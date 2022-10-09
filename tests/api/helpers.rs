@@ -13,7 +13,7 @@ use zero2prod::{
 
 static TRACING: Lazy<()> = Lazy::new(|| {
     if env::var("TEST_LOG").is_ok() {
-        init_telemetry("debug".into());
+        init_telemetry("sqlx=error,info".into());
     }
 });
 

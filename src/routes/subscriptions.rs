@@ -1,6 +1,10 @@
 use std::iter;
 
-use axum::{extract::State, Form};
+use axum::{
+    extract::State,
+    response::{IntoResponse, Response},
+    Form,
+};
 use hyper::StatusCode;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::Deserialize;
@@ -12,6 +16,7 @@ use uuid::Uuid;
 use crate::{
     domain::{NewSubscriber, SubscriberEmail, SubscriberName},
     email_client::EmailClient,
+    log::{LogErr, WrapAndLogErr},
     startup::AppState,
 };
 
@@ -31,45 +36,52 @@ impl TryFrom<FormData> for NewSubscriber {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum SubscribeError {
+    #[error("{0}")]
+    ValidationError(String),
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+impl IntoResponse for SubscribeError {
+    fn into_response(self) -> Response {
+        let status = match self {
+            SubscribeError::ValidationError(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            SubscribeError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, self.to_string()).into_response()
+    }
+}
+
 #[instrument(skip_all, fields(name=data.name, email=data.email, subscriber_id))]
-pub async fn subscribe(
-    state: State<AppState>,
-    data: Form<FormData>,
-) -> Result<(), (StatusCode, String)> {
+pub async fn subscribe(state: State<AppState>, data: Form<FormData>) -> Result<(), SubscribeError> {
     let subscriber_id = Uuid::new_v4();
     Span::current().record("subscriber_id", debug(subscriber_id));
 
-    let new_subscriber =
-        NewSubscriber::try_from(data.0).map_err(|err| (StatusCode::UNPROCESSABLE_ENTITY, err))?;
+    let new_subscriber = NewSubscriber::try_from(data.0)
+        .map_err(SubscribeError::ValidationError)
+        .log_err()?;
 
-    let mut transaction = state.db_pool.begin().await.map_err(|err| {
-        let msg = "failed to begin transaction".to_string();
-        error!(%err, msg);
-        (StatusCode::INTERNAL_SERVER_ERROR, msg)
-    })?;
+    let mut transaction = state
+        .db_pool
+        .begin()
+        .await
+        .wrap_and_log_err("failed to begin transaction")?;
 
     insert_subscriber(&mut transaction, &subscriber_id, &new_subscriber)
         .await
-        .map_err(|err| {
-            let msg = "failed to execute query".to_string();
-            error!(%err, msg);
-            (StatusCode::INTERNAL_SERVER_ERROR, msg)
-        })?;
+        .wrap_and_log_err("failed to execute query")?;
 
     let subscription_token = generate_subscription_token();
     store_token(&mut transaction, &subscriber_id, &subscription_token)
         .await
-        .map_err(|err| {
-            let msg = "failed to store subscription token".to_string();
-            error!(%err, msg=&msg);
-            (StatusCode::INTERNAL_SERVER_ERROR, msg)
-        })?;
+        .wrap_and_log_err("failed to store subscription token")?;
 
-    transaction.commit().await.map_err(|err| {
-        let msg = "failed to commit transaction".to_string();
-        error!(%err, msg);
-        (StatusCode::INTERNAL_SERVER_ERROR, msg)
-    })?;
+    transaction
+        .commit()
+        .await
+        .wrap_and_log_err("failed to commit transaction")?;
 
     send_confirmation_email(
         &state.email_client,
@@ -78,11 +90,7 @@ pub async fn subscribe(
         &subscription_token,
     )
     .await
-    .map_err(|err| {
-        let msg = "failed to send confirmation email".to_string();
-        error!(%err, msg);
-        (StatusCode::INTERNAL_SERVER_ERROR, msg)
-    })?;
+    .wrap_and_log_err("failed to send confirmation email")?;
 
     info!("added subscriber");
     Ok(())
