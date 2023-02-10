@@ -1,4 +1,3 @@
-use sqlx::query;
 use wiremock::{
     matchers::{method, path},
     Mock, ResponseTemplate,
@@ -28,7 +27,7 @@ async fn subscribe_persists_the_new_subscriber() {
 
     app.post_subscriptions(body.into()).await;
 
-    let saved = query!("SELECT email, name, status FROM subscriptions",)
+    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
         .fetch_one(&app.db_pool)
         .await
         .expect("Failed to fetch saved subscription.");
@@ -43,7 +42,7 @@ async fn subscribe_fails_if_there_is_a_fatal_database_error() {
     let app = spawn_app().await;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
 
-    query!("ALTER TABLE subscription_tokens DROP COLUMN subscription_token;")
+    sqlx::query!("ALTER TABLE subscription_tokens DROP COLUMN subscription_token;")
         .execute(&app.db_pool)
         .await
         .unwrap();
@@ -88,7 +87,7 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
 }
 
 #[tokio::test]
-async fn subscribe_returns_a_422_when_data_is_missing() {
+async fn subscribe_returns_a_400_when_data_is_missing() {
     let app = spawn_app().await;
     let test_cases = vec![
         ("name=le%20guin", "missing the email"),
@@ -100,10 +99,9 @@ async fn subscribe_returns_a_422_when_data_is_missing() {
         let response = app.post_subscriptions(invalid_body.into()).await;
 
         assert_eq!(
-            422,
+            400,
             response.status().as_u16(),
-            "The API did not fail with 422 Unprocessable Entity when the payload was {}.",
-            error_message
+            "The API did not fail with 400 Bad Request when the payload was {error_message}",
         );
     }
 }
@@ -117,14 +115,13 @@ async fn subscribe_returns_a_422_when_fields_are_present_but_invalid() {
         ("name=Ursula&email=definitely-not-an-email", "invalid email"),
     ];
 
-    for (body, description) in test_cases {
+    for (body, error_message) in test_cases {
         let response = app.post_subscriptions(body.into()).await;
 
         assert_eq!(
             422,
             response.status().as_u16(),
-            "The API did not return a 422 OK when the payload was {}.",
-            description
+            "The API did not return a 422 OK when the payload was {error_message}",
         );
     }
 }

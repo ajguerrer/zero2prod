@@ -11,13 +11,14 @@ use sqlx::{
 };
 use url::Url;
 
-use crate::domain::SubscriberEmail;
+use crate::{domain::SubscriberEmail, email_client::EmailClient};
 
 #[derive(Deserialize)]
 pub struct Settings {
     pub application: ApplicationSettings,
     pub database: DatabaseSettings,
     pub email_client: EmailClientSettings,
+    pub redis_uri: Secret<String>,
 }
 
 #[derive(Deserialize)]
@@ -26,6 +27,7 @@ pub struct ApplicationSettings {
     pub port: u16,
     pub host: String,
     pub base_url: Url,
+    pub hmac_secret: Secret<String>,
 }
 
 #[derive(Deserialize)]
@@ -40,7 +42,7 @@ pub struct DatabaseSettings {
 }
 
 #[serde_as]
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct EmailClientSettings {
     pub base_url: Url,
     pub sender_email: String,
@@ -56,7 +58,7 @@ pub fn get_configuration() -> Result<Settings, ConfigError> {
     let env = std::env::var("APP_ENVIRONMENT").unwrap_or_else(|_| "local".into());
     let settings = Config::builder()
         .add_source(File::from(config_dir.join("base.yaml")))
-        .add_source(File::from(config_dir.join(format!("{}.yaml", env))))
+        .add_source(File::from(config_dir.join(format!("{env}.yaml"))))
         .add_source(
             Environment::with_prefix("APP")
                 .prefix_separator("_")
@@ -89,6 +91,11 @@ impl DatabaseSettings {
 }
 
 impl EmailClientSettings {
+    pub fn client(self) -> EmailClient {
+        let sender_email = self.sender().expect("Invalid sender email address");
+        EmailClient::new(self.base_url, sender_email, self.auth_token, self.timeout)
+    }
+
     pub fn sender(&self) -> Result<SubscriberEmail, String> {
         SubscriberEmail::parse(self.sender_email.clone())
     }

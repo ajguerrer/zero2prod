@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:14.5
+        image: postgres:15
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
@@ -19,7 +19,7 @@ jobs:
         ports:
           - 5432:5432
       redis:
-        image: redis:7.0.5
+        image: redis:7
         ports:
           - 6379:6379
     env:
@@ -59,7 +59,7 @@ jobs:
         uses: actions-rs/cargo@v1
         if: steps.cache-sqlx.outputs.cache-hit == false
         with:
-          command: install 
+          command: install
           args: >
             sqlx-cli
             --force
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:14.5
+        image: postgres:15
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
@@ -131,11 +131,11 @@ jobs:
             ~/.cargo/bin/sqlx
           key: ${{ runner.os }}-sqlx-${{ env.SQLX_VERSION }}
 
-      - name: Install sqlx-cli 
+      - name: Install sqlx-cli
         uses: actions-rs/cargo@v1
         if: steps.cache-sqlx.outputs.cache-hit == false
         with:
-          command: install 
+          command: install
           args: >
             sqlx-cli
             --force
@@ -158,14 +158,19 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:12
+        image: postgres:15
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
     env:
+      CARGO_TARPAULIN_VERSION: 0.25.0
       SQLX_VERSION: 0.6.2
       SQLX_FEATURES: "rustls,postgres"
     steps:
@@ -186,11 +191,11 @@ jobs:
             ~/.cargo/bin/sqlx
           key: ${{ runner.os }}-sqlx-${{ env.SQLX_VERSION }}
 
-      - name: Install sqlx-cli 
+      - name: Install sqlx-cli
         uses: actions-rs/cargo@v1
         if: steps.cache-sqlx.outputs.cache-hit == false
         with:
-          command: install 
+          command: install
           args: >
             sqlx-cli
             --force
@@ -198,11 +203,31 @@ jobs:
             --features ${{ env.SQLX_FEATURES }}
             --no-default-features
             --locked
+
       - name: Migrate database
         run: |
           sudo apt-get install libpq-dev -y
           SKIP_DOCKER=true ./scripts/init_db.sh
-      - name: Run cargo-tarpaulin
-        uses: actions-rs/tarpaulin@v0.1
+
+      - name: Cache cargo-tarpaulin
+        uses: actions/cache@v2
+        id: cache-tarpaulin
         with:
-          args: '--ignore-tests --avoid-cfg-tarpaulin'
+          path: |
+            ~/.cargo/bin/cargo-tarpaulin
+          key: ${{ runner.os }}-cargo-tarpaulin-${{ env.CARGO_TARPAULIN_VERSION }}
+
+      - name: Install cargo-tarpaulin
+        uses: actions-rs/cargo@v1
+        if: steps.cache-cargo-tarpaulin.outputs.cache-hit == false
+        with:
+          command: install
+          args: >
+            cargo-tarpaulin
+            --force
+            --version=${{ env.CARGO_TARPAULIN_VERSION }}
+            --locked
+
+      - name: Run cargo-tarpaulin
+        run: |
+          cargo tarpaulin --ignore-tests --avoid-cfg-tarpaulin --out Xml

@@ -12,7 +12,7 @@ async fn health_check_works() {
         .get(format!("http://{address}/health_check"))
         .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to execute request");
 
     assert!(response.status().is_success());
 }

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use tracing::error;
 
@@ -36,6 +36,28 @@ where
             Ok(t) => Ok(t),
             Err(err) => {
                 let err = err.into().context(context);
+                error!("{:#}", err);
+                Err(err)
+            }
+        }
+    }
+}
+
+pub trait OkOrWrapAndLog<T> {
+    fn ok_or_wrap_and_log<M>(self, msg: M) -> anyhow::Result<T>
+    where
+        M: Display + Debug + Send + Sync + 'static;
+}
+
+impl<T> OkOrWrapAndLog<T> for Option<T> {
+    fn ok_or_wrap_and_log<M>(self, msg: M) -> anyhow::Result<T>
+    where
+        M: Display + Debug + Send + Sync + 'static,
+    {
+        match self {
+            Some(t) => Ok(t),
+            None => {
+                let err = anyhow::Error::msg(msg);
                 error!("{:#}", err);
                 Err(err)
             }

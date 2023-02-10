@@ -1,5 +1,10 @@
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+    EnvFilter,
+};
 
 pub fn init_telemetry(level: String) {
     tracing_subscriber::registry()
@@ -8,7 +13,11 @@ pub fn init_telemetry(level: String) {
                 .or_else(|_| EnvFilter::try_new(level))
                 .unwrap(),
         )
-        .with(fmt::layer().with_target(false))
         .with(ErrorLayer::default())
+        .with(
+            fmt::layer()
+                .with_span_events(FmtSpan::CLOSE)
+                .with_target(false),
+        )
         .init();
 }

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Debug)]
@@ -11,10 +13,16 @@ impl SubscriberName {
         let contains_forbidden_characters = s.chars().any(|g| forbidden_characters.contains(&g));
 
         if is_empty_or_whitespace || is_too_long || contains_forbidden_characters {
-            Err(format!("{} is not a valid subscriber name.", s))
+            Err(format!("{s} is not a valid subscriber name"))
         } else {
             Ok(Self(s))
         }
+    }
+}
+
+impl Display for SubscriberName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
